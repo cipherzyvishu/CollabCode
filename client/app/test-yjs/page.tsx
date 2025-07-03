@@ -81,7 +81,7 @@ export default function TestYjsPage() {
       // Test Y.js text collaboration
       const ytext = ydoc.getText('code')
       
-      ytext.observe((event) => {
+      ytext.observe(() => {
         addMessage(`Y.js text changed: ${ytext.toString()}`)
       })
 

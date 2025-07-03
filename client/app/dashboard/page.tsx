@@ -17,7 +17,6 @@ import {
   Bell,
   User,
   Play,
-  Calendar,
   BookOpen,
   Zap
 } from 'lucide-react'

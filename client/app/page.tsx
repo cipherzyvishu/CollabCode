@@ -10,14 +10,12 @@ import { Code, Users, Zap, ArrowRight } from 'lucide-react'
 const HomePage = () => {
   const router = useRouter()
   const supabase = useSupabase()
-  const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser()
-        setUser(user)
         
         // If user is authenticated, redirect to dashboard
         if (user) {

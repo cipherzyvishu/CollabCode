@@ -18,7 +18,7 @@ export default function TestDirectWebSocketPage() {
     try {
       const ws = new WebSocket(wsUrl)
 
-      ws.onopen = (event) => {
+      ws.onopen = () => {
         addMessage('✅ Direct WebSocket connection opened')
         setIsConnected(true)
         

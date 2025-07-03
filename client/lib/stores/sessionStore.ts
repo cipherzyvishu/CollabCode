@@ -198,14 +198,14 @@ export const useSessionStore = create<SessionState>()(
       subscribeToRealTimeUpdates: (sessionId: string) => {
         serviceProvider.subscribeToSession(sessionId, {
           onSessionChange: (payload) => {
-            const { eventType, new: newRecord, old: oldRecord } = payload
+            const { eventType, new: newRecord } = payload
             
             if (eventType === 'UPDATE' && newRecord) {
               set({ currentSession: newRecord })
             }
           },
           
-          onParticipantChange: async (payload) => {
+          onParticipantChange: async (_payload) => {
             // Refresh participants when there are changes
             try {
               const { participants } = await serviceProvider.sessionService.getSessionWithParticipants(sessionId)

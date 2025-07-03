@@ -7,7 +7,6 @@ type SessionUpdate = Database['public']['Tables']['sessions']['Update']
 type SessionParticipant = Database['public']['Tables']['session_participants']['Row']
 type SessionParticipantInsert = Database['public']['Tables']['session_participants']['Insert']
 type CodeSnapshot = Database['public']['Tables']['code_snapshots']['Row']
-type CodeSnapshotInsert = Database['public']['Tables']['code_snapshots']['Insert']
 
 export class SessionService {
   constructor(private supabase: ReturnType<typeof createClient<Database>>) {}

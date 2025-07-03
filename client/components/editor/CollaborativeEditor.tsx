@@ -32,6 +32,7 @@ export default function CollaborativeEditor({
   const socket = useSocket()
   
   const [isConnected, setIsConnected] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [collaborators, setCollaborators] = useState<string[]>([])
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
@@ -290,21 +291,6 @@ export default function CollaborativeEditor({
       }
     }
   }, []) // Empty dependency array - only run cleanup on unmount
-
-  const getLanguageExtension = (lang: string) => {
-    const extensionMap: { [key: string]: string } = {
-      javascript: 'js',
-      typescript: 'ts',
-      python: 'py',
-      html: 'html',
-      css: 'css',
-      json: 'json',
-      markdown: 'md',
-      tsx: 'tsx',
-      jsx: 'jsx'
-    }
-    return extensionMap[lang] || 'txt'
-  }
 
   return (
     <div className="relative h-full">

@@ -7,19 +7,16 @@ import { useSessionStore, useUserStore } from '@/lib/stores'
 import { serviceProvider } from '@/lib/services'
 import { socketManager } from '@/sockets'
 import { Button } from '@/components/ui/Button'
-import { Card, CardContent, CardHeader } from '@/components/ui/Card'
+import { Card, CardContent } from '@/components/ui/Card'
 import { 
   ArrowLeft,
   Users,
-  Settings,
   Share2,
   Play,
-  Pause,
   Mic,
   MicOff,
   Video,
   VideoOff,
-  Copy,
   MessageSquare,
   Download,
   Sun,
@@ -68,16 +65,12 @@ export default function SessionPage() {
     participants,
     isLoading: sessionLoading,
     error,
-    loadSession,
-    joinSession,
     leaveSession,
     saveCodeSnapshot,
-    subscribeToRealTimeUpdates,
-    unsubscribeFromRealTimeUpdates,
     reset
   } = useSessionStore()
   
-  const { user, profile, isAuthenticated, isLoading: userLoading } = useUserStore()
+  const { user, isAuthenticated, isLoading: userLoading } = useUserStore()
   
   // Debug logging for state changes (can be removed in production)
   useEffect(() => {

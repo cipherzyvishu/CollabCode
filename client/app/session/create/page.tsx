@@ -14,7 +14,6 @@ import {
   Lock,
   Code,
   Palette,
-  Settings,
   Play,
   Copy,
   Check
