@@ -2,7 +2,8 @@
 
 # Use Node.js 20
 [build]
-  command = "npm run build"
+  builder = "nixpacks"
+  buildCommand = "npm install && npm run build"
   
 [deploy]
   command = "npm start"
