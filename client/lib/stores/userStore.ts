@@ -34,8 +34,7 @@ interface UserState {
 
 export const useUserStore = create<UserState>()(
   devtools(
-    persist(
-      (set, get) => ({
+    (set, get) => ({
         // Initial state
         user: null,
         profile: null,
@@ -50,21 +49,52 @@ export const useUserStore = create<UserState>()(
           set({ isLoading: true, error: null })
           
           try {
-            const { user, profile } = await serviceProvider.userService.getCurrentUser()
+            // First check for existing session
+            const { data: { session }, error: sessionError } = await serviceProvider.getSupabaseClient().auth.getSession()
             
-            set({
-              user,
-              profile,
-              isAuthenticated: !!user,
-              isLoading: false
-            })
+            if (sessionError) {
+              console.error('Session error:', sessionError)
+              set({
+                user: null,
+                profile: null,
+                isAuthenticated: false,
+                isLoading: false,
+                error: sessionError.message
+              })
+              return
+            }
 
-            if (user) {
+            if (session?.user) {
+              console.log('🔐 Existing session found:', session.user.id)
+              
+              const profile = await serviceProvider.userService.ensureUserProfile(
+                session.user.id,
+                session.user.email,
+                session.user.user_metadata?.display_name
+              )
+              
+              set({
+                user: session.user,
+                profile,
+                isAuthenticated: true,
+                isLoading: false,
+                error: null
+              })
+
               // Load user sessions in background
               get().loadUserSessions()
               
               // Update last seen
-              serviceProvider.userService.updateLastSeen(user.id)
+              serviceProvider.userService.updateLastSeen(session.user.id)
+            } else {
+              console.log('❌ No existing session found')
+              set({
+                user: null,
+                profile: null,
+                isAuthenticated: false,
+                isLoading: false,
+                error: null
+              })
             }
           } catch (error) {
             console.error('Failed to initialize user:', error)
@@ -272,46 +302,56 @@ export const useUserStore = create<UserState>()(
           })
         }
       }),
-      {
-        name: 'user-store',
-        // Only persist essential auth state
-        partialize: (state) => ({
-          user: state.user,
-          profile: state.profile,
-          isAuthenticated: state.isAuthenticated
-        })
-      }
-    ),
     {
       name: 'user-store'
     }
   )
 )
 
-// Auth state change listener
+// Auth state change listener - properly update store
 if (typeof window !== 'undefined') {
-  serviceProvider.getSupabaseClient().auth.onAuthStateChange(async (event, session) => {
-    const store = useUserStore.getState()
+  let authListenerInitialized = false
+  
+  const initAuthListener = () => {
+    if (authListenerInitialized) return
+    authListenerInitialized = true
     
-    if (event === 'SIGNED_IN' && session?.user) {
-      const profile = await serviceProvider.userService.ensureUserProfile(
-        session.user.id,
-        session.user.email,
-        session.user.user_metadata?.display_name
-      )
+    serviceProvider.getSupabaseClient().auth.onAuthStateChange(async (event, session) => {
+      console.log('🔐 Auth state change:', event, session?.user?.id)
+      
+      if (event === 'SIGNED_IN' && session?.user) {
+        const profile = await serviceProvider.userService.ensureUserProfile(
+          session.user.id,
+          session.user.email,
+          session.user.user_metadata?.display_name
+        )
 
-      store.user = session.user
-      store.profile = profile
-      store.isAuthenticated = true
-      store.isLoading = false
-      store.error = null
-      
-      // Load user sessions and update last seen
-      store.loadUserSessions()
-      serviceProvider.userService.updateLastSeen(session.user.id)
-      
-    } else if (event === 'SIGNED_OUT') {
-      store.reset()
-    }
-  })
+        useUserStore.setState({
+          user: session.user,
+          profile,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null
+        })
+        
+        // Load user sessions and update last seen
+        const { loadUserSessions } = useUserStore.getState()
+        loadUserSessions()
+        serviceProvider.userService.updateLastSeen(session.user.id)
+        
+      } else if (event === 'SIGNED_OUT') {
+        useUserStore.getState().reset()
+      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+        // Update user data on token refresh
+        useUserStore.setState({
+          user: session.user,
+          isAuthenticated: true,
+          isLoading: false
+        })
+      }
+    })
+  }
+  
+  // Initialize auth listener when store is first created
+  initAuthListener()
 }

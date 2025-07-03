@@ -74,21 +74,36 @@ export default function CollaborativeEditor({
     // Initialize WebSocket provider for real-time collaboration
     try {
       const wsUrl = process.env.NODE_ENV === 'production' 
-        ? `wss://${window.location.host}/collaboration`
-        : 'ws://localhost:8000/collaboration'
+        ? `wss://${window.location.host}`
+        : 'ws://localhost:8000'
+      
+      console.log('🔗 Connecting to Y.js WebSocket:', wsUrl, `session-${sessionId}`)
       
       const provider = new WebsocketProvider(wsUrl, `session-${sessionId}`, ydoc)
       providerRef.current = provider
 
       provider.on('status', (event: any) => {
+        console.log('🔗 Y.js WebSocket status:', event.status)
         setIsConnected(event.status === 'connected')
       })
 
+      provider.on('connection-close', (event: any) => {
+        console.log('🔗 Y.js WebSocket connection closed:', event)
+      })
+
+      provider.on('connection-error', (event: any) => {
+        console.error('🔗 Y.js WebSocket connection error:', event)
+      })
+
       // Note: y-websocket doesn't have a 'peers' event, we'll track collaborators differently
-      // For now, we'll use a simple collaborator count based on awareness states
+      // We need to sync this with the actual participants from the session store
       provider.awareness.on('change', () => {
-        const states = Array.from(provider.awareness.getStates().values())
-        setCollaborators(states.map((state: any, index: number) => `User ${index + 1}`))
+        // Only count unique remote clients - exclude our own client
+        const states = Array.from(provider.awareness.getStates().entries())
+          .filter(([clientID]) => clientID !== provider.awareness.clientID);
+        
+        console.log('👥 Y.js awareness states changed:', states.length + 1) // +1 for ourselves
+        setCollaborators(states.map((entry, index) => `User ${index + 1}`))
       })
 
       // Create Monaco binding for collaborative editing
@@ -103,15 +118,19 @@ export default function CollaborativeEditor({
 
     } catch (error) {
       console.warn('WebSocket collaboration not available:', error)
-      // Fallback to Socket.IO for real-time sync
-      if (socket) {
-        setupSocketIOSync(editor)
-      }
+      // Socket.IO sync will be handled by the useEffect
     }
   }
 
   const setupSocketIOSync = (editor: any) => {
     if (!socket) return
+
+    // Clean up any existing listeners first
+    socket.off('code-change')
+    socket.off('cursor-change')
+    socket.off('session-state')
+    socket.off('user-joined')
+    socket.off('user-left')
 
     // Join the session room with user information
     const userName = 'User'; // TODO: Get from user store
@@ -132,7 +151,7 @@ export default function CollaborativeEditor({
 
     // Send code changes to other users with debouncing
     let timeout: NodeJS.Timeout
-    editor.onDidChangeModelContent(() => {
+    const handleContentChange = () => {
       clearTimeout(timeout)
       timeout = setTimeout(() => {
         const code = editor.getValue()
@@ -145,7 +164,13 @@ export default function CollaborativeEditor({
         }
         onCodeChange?.(code)
       }, 300) // Debounce for 300ms
-    })
+    }
+
+    // Remove existing content change listener if any
+    const model = editor.getModel()
+    if (model) {
+      model.onDidChangeContent(handleContentChange)
+    }
 
     // Listen for cursor changes
     socket.on('cursor-change', (data: { 
@@ -180,7 +205,7 @@ export default function CollaborativeEditor({
     })
 
     // Send cursor changes
-    editor.onDidChangeCursorPosition((e: any) => {
+    const handleCursorChange = (e: any) => {
       if (e.position && socket.id) {
         socket.emit('cursor-change', {
           sessionId,
@@ -189,7 +214,9 @@ export default function CollaborativeEditor({
           userName: 'User' // TODO: Get from user store
         })
       }
-    })
+    }
+
+    editor.onDidChangeCursorPosition(handleCursorChange)
 
     // Listen for session state updates
     socket.on('session-state', (data: { 
@@ -218,28 +245,51 @@ export default function CollaborativeEditor({
     setIsConnected(true)
   }
 
+  // Handle socket connection and session joining
   useEffect(() => {
+    if (socket && sessionId && editorRef.current) {
+      console.log('🔗 Setting up Socket.IO sync for session:', sessionId)
+      setupSocketIOSync(editorRef.current)
+    }
+  }, [socket, sessionId])
+
+  // Cleanup effect - only runs on unmount
+  useEffect(() => {
+    let isCleanedUp = false
+
     return () => {
-      // Cleanup on unmount
-      if (bindingRef.current) {
-        bindingRef.current.destroy()
-      }
-      if (providerRef.current) {
-        providerRef.current.destroy()
-      }
-      if (docRef.current) {
-        docRef.current.destroy()
-      }
-      if (socket) {
-        socket.off('code-change')
-        socket.off('cursor-change')
-        socket.off('session-state')
-        socket.off('user-joined')
-        socket.off('user-left')
-        socket.emit('leave-session', sessionId)
+      // Cleanup on unmount only, not on dependency changes
+      if (!isCleanedUp) {
+        isCleanedUp = true
+        
+        console.log('🧹 Cleaning up CollaborativeEditor for session:', sessionId)
+        
+        // Cleanup Y.js bindings
+        if (bindingRef.current) {
+          bindingRef.current.destroy()
+          bindingRef.current = null
+        }
+        if (providerRef.current) {
+          providerRef.current.destroy()
+          providerRef.current = null
+        }
+        if (docRef.current) {
+          docRef.current.destroy()
+          docRef.current = null
+        }
+        
+        // Cleanup Socket.IO listeners and leave session
+        if (socket) {
+          socket.off('code-change')
+          socket.off('cursor-change')
+          socket.off('session-state')
+          socket.off('user-joined')
+          socket.off('user-left')
+          socket.emit('leave-session', sessionId)
+        }
       }
     }
-  }, [sessionId, socket])
+  }, []) // Empty dependency array - only run cleanup on unmount
 
   const getLanguageExtension = (lang: string) => {
     const extensionMap: { [key: string]: string } = {
@@ -259,16 +309,11 @@ export default function CollaborativeEditor({
   return (
     <div className="relative h-full">
       {/* Connection Status */}
-      <div className="absolute top-2 right-2 z-10 flex items-center space-x-2">
+      <div className="absolute top-2 right-2 z-10 flex items-center space-x-2 bg-opacity-80 bg-gray-800 px-2 py-1 rounded-md">
         <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`} />
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-white">
           {isConnected ? 'Connected' : 'Disconnected'}
         </span>
-        {collaborators.length > 0 && (
-          <span className="text-xs text-gray-400">
-            {collaborators.length} collaborator{collaborators.length !== 1 ? 's' : ''}
-          </span>
-        )}
       </div>
 
       <Editor

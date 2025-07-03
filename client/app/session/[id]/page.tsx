@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { useSessionStore, useUserStore } from '@/lib/stores'
 import { serviceProvider } from '@/lib/services'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
-import CollaborativeEditor from '@/components/editor/CollaborativeEditor'
 import { 
   ArrowLeft,
   Users,
@@ -23,8 +23,22 @@ import {
   Download,
   Sun,
   Moon,
-  AlertCircle
+  AlertCircle,
+  Save
 } from 'lucide-react'
+
+// Dynamically import CollaborativeEditor to avoid SSR issues
+const CollaborativeEditor = dynamic(() => import('@/components/editor/CollaborativeEditor'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto"></div>
+        <p className="mt-2 text-sm text-gray-600">Loading editor...</p>
+      </div>
+    </div>
+  )
+})
 
 interface SessionState {
   micEnabled: boolean
@@ -37,12 +51,14 @@ export default function SessionPage() {
   const router = useRouter()
   const params = useParams()
   const sessionId = params?.id as string
+  const forceJoin = typeof window !== 'undefined' && 
+    new URLSearchParams(window.location.search).get('forceJoin') === 'true'
   
   // Zustand stores
   const {
     currentSession,
     participants,
-    isLoading,
+    isLoading: sessionLoading,
     error,
     loadSession,
     joinSession,
@@ -53,7 +69,19 @@ export default function SessionPage() {
     reset
   } = useSessionStore()
   
-  const { user, profile, isAuthenticated } = useUserStore()
+  const { user, profile, isAuthenticated, isLoading: userLoading } = useUserStore()
+  
+  // Debug logging for state changes (can be removed in production)
+  useEffect(() => {
+    console.log('🔍 Session page state change:', {
+      userLoading,
+      sessionLoading,
+      isAuthenticated,
+      userId: user?.id,
+      sessionId,
+      initialized: initializationRef.current
+    })
+  }, [userLoading, sessionLoading, isAuthenticated, user?.id, sessionId])
   
   // Local UI state
   const [sessionState, setSessionState] = useState<SessionState>({
@@ -65,41 +93,124 @@ export default function SessionPage() {
   
   const [currentCode, setCurrentCode] = useState('')
   const [hasJoined, setHasJoined] = useState(false)
+  const joinedRef = useRef(false) // Track if user has already joined
+  const initializationRef = useRef(false) // Track if session has been initialized
 
-  // Initialize session on mount
+  // Initialize session on mount with improved auth handling
   useEffect(() => {
-    if (!sessionId || !isAuthenticated || !user) {
-      router.push('/auth/signin')
-      return
+    let mounted = true // Track if component is still mounted
+    
+    const initializeSession = async () => {
+      console.log('🔍 initializeSession called:', { 
+        sessionId, 
+        userLoading, 
+        isAuthenticated, 
+        userId: user?.id,
+        pathname: window.location.pathname,
+        forceJoin
+      })
+      
+      if (!sessionId) {
+        console.log('⚠️ No session ID, redirecting to dashboard')
+        router.push('/dashboard')
+        return
+      }
+
+      // Wait for authentication to be determined
+      if (userLoading) {
+        console.log('⏳ Waiting for auth to load... userLoading:', userLoading)
+        return
+      }
+
+      if (!isAuthenticated || !user) {
+        console.log('❌ Not authenticated, redirecting to signin...', { isAuthenticated, user })
+        // Instead of redirecting immediately, check if we're in the process of signing in
+        // This prevents automatic redirects in incognito mode
+        if (window.location.pathname.includes('/auth/login') || window.location.pathname.includes('/auth/signin')) {
+          console.log('Already on login page, not redirecting')
+          return
+        }
+        
+        const redirectUrl = `/auth/login?redirectTo=${encodeURIComponent(`/session/${sessionId}`)}&joinSession=true`
+        console.log('Redirecting to login with session join flag:', redirectUrl)
+        router.push(redirectUrl)
+        return
+      }
+
+      // Prevent double initialization
+      if (initializationRef.current) {
+        console.log('🚫 Session already initialized, skipping...')
+        return
+      }
+
+      console.log('✅ User authenticated, loading session:', sessionId, user.id)
+      initializationRef.current = true
+      
+      // Only proceed if component is still mounted
+      if (!mounted) return
+      
+      // Get current store functions to avoid dependency issues
+      const { loadSession, subscribeToRealTimeUpdates } = useSessionStore.getState()
+      
+      // Load session data
+      await loadSession(sessionId)
+      
+      // Subscribe to real-time updates
+      subscribeToRealTimeUpdates(sessionId)
     }
 
-    // Load session data
-    loadSession(sessionId)
-    
-    // Subscribe to real-time updates
-    subscribeToRealTimeUpdates(sessionId)
+    initializeSession()
 
-    // Cleanup on unmount
+    // Cleanup function
     return () => {
+      mounted = false
+      joinedRef.current = false // Reset join status
+      initializationRef.current = false // Reset initialization status
+      const { unsubscribeFromRealTimeUpdates } = useSessionStore.getState()
       unsubscribeFromRealTimeUpdates()
     }
-  }, [sessionId, isAuthenticated, user, loadSession, subscribeToRealTimeUpdates, unsubscribeFromRealTimeUpdates, router])
+  }, [sessionId, isAuthenticated, user, userLoading, router])
 
   // Join session when data is loaded
   useEffect(() => {
-    if (currentSession && user && !hasJoined && !isLoading) {
-      const isParticipant = participants.some(p => p.user_id === user.id && p.is_active)
+    if (currentSession && user && !joinedRef.current && !sessionLoading) {
+      console.log('🔄 Checking if user needs to join session:', { 
+        userId: user.id,
+        sessionId: currentSession.id,
+        forceJoin
+      });
       
-      if (!isParticipant) {
+      // Check if user is already a participant
+      const isParticipant = participants.some(p => p.user_id === user.id && p.is_active);
+      
+      if (!isParticipant || forceJoin) {
+        console.log(`👤 User is ${!isParticipant ? 'not a participant' : 'being forced to join'}, joining session...`);
+        
+        // Clear forceJoin parameter from URL if it exists
+        if (forceJoin && typeof window !== 'undefined') {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('forceJoin');
+          window.history.replaceState({}, document.title, url.toString());
+        }
+        
+        // Get current joinSession function to avoid dependency issues
+        const { joinSession } = useSessionStore.getState();
+        
         // Join the session
         joinSession(sessionId, user.id).then(() => {
-          setHasJoined(true)
-        })
+          console.log('✅ User joined session successfully');
+          joinedRef.current = true;
+          setHasJoined(true);
+        }).catch(error => {
+          console.error('❌ Failed to join session:', error);
+        });
       } else {
-        setHasJoined(true)
+        console.log('👤 User is already a participant in this session');
+        joinedRef.current = true;
+        setHasJoined(true);
       }
     }
-  }, [currentSession, user, hasJoined, isLoading, participants, joinSession, sessionId])
+  }, [currentSession, user, sessionLoading, participants, sessionId, forceJoin])
 
   // Load initial code from latest snapshot
   useEffect(() => {
@@ -116,90 +227,33 @@ export default function SessionPage() {
 
   const getStarterCode = (language: string) => {
     const starterCodes: { [key: string]: string } = {
-      typescript: `// Welcome to CollabCode - React TypeScript Session!
-import React, { useState } from 'react';
+      typescript: `// Welcome to CollabCode - TypeScript Session!
 
-interface Props {
-  title: string;
+function greeting(name: string): string {
+  return \`Hello, \${name}!\`;
 }
 
-const CollaborativeComponent: React.FC<Props> = ({ title }) => {
-  const [count, setCount] = useState(0);
-  
-  return (
-    <div className="p-4 border rounded-lg">
-      <h2 className="text-xl font-bold mb-4">{title}</h2>
-      <p className="mb-4">Count: {count}</p>
-      <button 
-        onClick={() => setCount(count + 1)}
-        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-      >
-        Increment
-      </button>
-    </div>
-  );
-};
+console.log(greeting("Collaborator"));
 
-export default CollaborativeComponent;
-
-// Start building something amazing together!`,
+// Start coding together!`,
       javascript: `// Welcome to CollabCode - JavaScript Session!
-function CollaborativeApp() {
-  let count = 0;
-  
-  function increment() {
-    count++;
-    updateDisplay();
-  }
-  
-  function updateDisplay() {
-    const countElement = document.getElementById('count');
-    if (countElement) {
-      countElement.textContent = count.toString();
-    }
-  }
-  
-  return {
-    increment,
-    getCount: () => count
-  };
+
+function greeting(name) {
+  return \`Hello, \${name}!\`;
 }
 
-// Initialize the app
-const app = CollaborativeApp();
+console.log(greeting("Collaborator"));
 
-// Start coding here!
-console.log('Welcome to collaborative coding!');`,
+// Start coding together!`,
       python: `# Welcome to CollabCode - Python Session!
-def collaborative_function():
-    """
-    A simple function to demonstrate collaborative coding
-    """
-    print("Hello from CollabCode!")
-    
-    # Example: Simple counter class
-    class Counter:
-        def __init__(self):
-            self.count = 0
-        
-        def increment(self):
-            self.count += 1
-            return self.count
-        
-        def get_count(self):
-            return self.count
-    
-    # Create and use the counter
-    counter = Counter()
-    print(f"Initial count: {counter.get_count()}")
-    
-    for i in range(5):
-        counter.increment()
-        print(f"Count after increment {i+1}: {counter.get_count()}")
 
-if __name__ == "__main__":
-    collaborative_function()
-    # Start building something amazing together!`,
+def greeting(name):
+    """Say hello to the collaborator"""
+    return f"Hello, {name}!"
+
+print(greeting("Collaborator"))
+
+# Start coding together!`,
       html: `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -208,69 +262,25 @@ if __name__ == "__main__":
     <title>CollabCode Session</title>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: system-ui, sans-serif;
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            min-height: 100vh;
         }
-        
-        .container {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 30px;
-            border-radius: 15px;
-            backdrop-filter: blur(10px);
-        }
-        
-        .counter {
-            text-align: center;
-            margin: 30px 0;
-        }
-        
-        button {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            font-size: 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        
-        button:hover {
-            background: #45a049;
-        }
-        
-        #count {
-            font-size: 2em;
-            margin: 20px 0;
+        h1 {
+            color: #333;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🚀 Welcome to CollabCode!</h1>
-        <p>Start building something amazing together!</p>
-        
-        <div class="counter">
-            <h2>Collaborative Counter</h2>
-            <div id="count">0</div>
-            <button onclick="increment()">Click me!</button>
-        </div>
-    </div>
+    <h1>Welcome to CollabCode!</h1>
+    <p>Start building something together!</p>
+    
+    <div id="app"></div>
 
     <script>
-        let count = 0;
-        
-        function increment() {
-            count++;
-            document.getElementById('count').textContent = count;
-        }
-        
-        // Add your JavaScript here!
+        document.getElementById('app').textContent = 'Hello, Collaborator!';
+        // Start coding together!
     </script>
 </body>
 </html>`
@@ -289,7 +299,7 @@ if __name__ == "__main__":
 
   const handleShareSession = async () => {
     if (currentSession) {
-      const shareText = `Join my CollabCode session: ${currentSession.name}\nCode: ${currentSession.code}\nLink: ${window.location.origin}/session/${currentSession.id}`
+      const shareText = `Join my CollabCode session: ${currentSession.title}\nCode: ${currentSession.session_code}\nLink: ${window.location.origin}/session/${currentSession.id}`
       try {
         await navigator.clipboard.writeText(shareText)
         // Could add a toast notification here
@@ -299,19 +309,54 @@ if __name__ == "__main__":
     }
   }
 
+  // Auto-save timeout ref
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
   const handleCodeChange = async (code: string) => {
     setCurrentCode(code)
     
-    // Auto-save code snapshot every 30 seconds or on significant changes
+    // Auto-save code snapshot with debouncing
     if (currentSession && user && code.trim() !== currentCode.trim()) {
-      // Debounce the save operation
-      const timeoutId = setTimeout(() => {
-        saveCodeSnapshot(code, user.id)
-      }, 30000) // 30 seconds
+      // Clear existing timeout
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
       
-      return () => clearTimeout(timeoutId)
+      // Set new timeout for auto-save (5 seconds)
+      autoSaveTimeoutRef.current = setTimeout(async () => {
+        try {
+          console.log('Auto-saving code snapshot...')
+          await saveCodeSnapshot(code, user.id)
+          console.log('Code snapshot saved successfully')
+        } catch (error) {
+          console.error('Failed to auto-save code snapshot:', error)
+        }
+      }, 5000) // Auto-save after 5 seconds of inactivity
     }
   }
+
+  // Manual save function
+  const handleManualSave = async () => {
+    if (currentSession && user && currentCode) {
+      try {
+        console.log('Manually saving code snapshot...')
+        await saveCodeSnapshot(currentCode, user.id)
+        console.log('Manual save successful')
+        // You could show a toast notification here
+      } catch (error) {
+        console.error('Manual save failed:', error)
+      }
+    }
+  }
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleRunCode = () => {
     setSessionState(prev => ({ ...prev, isRunning: true }))
@@ -336,7 +381,7 @@ if __name__ == "__main__":
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${currentSession.name.replace(/\s+/g, '_').toLowerCase()}.${extension}`
+    a.download = `${currentSession.title.replace(/\s+/g, '_').toLowerCase()}.${extension}`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -358,13 +403,15 @@ if __name__ == "__main__":
     }))
   }
 
-  // Loading state
-  if (isLoading) {
+  // Loading state - show while auth is being determined
+  if (userLoading || sessionLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading session...</p>
+          <p className="mt-4 text-gray-600">
+            {userLoading ? 'Checking authentication...' : 'Loading session...'}
+          </p>
         </div>
       </div>
     )
@@ -418,8 +465,8 @@ if __name__ == "__main__":
               </Button>
               
               <div>
-                <h1 className="text-lg font-semibold text-gray-900">{currentSession.name}</h1>
-                <p className="text-sm text-gray-500">Session Code: {currentSession.code}</p>
+                <h1 className="text-lg font-semibold text-gray-900">{currentSession.title}</h1>
+                <p className="text-sm text-gray-500">Session Code: {currentSession.session_code}</p>
               </div>
             </div>
 
@@ -452,7 +499,7 @@ if __name__ == "__main__":
               {/* Participants */}
               <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <Users className="h-4 w-4" />
-                <span>{participants.length}</span>
+                <span className="rounded-md bg-gray-100 px-2 py-0.5">{participants.filter(p => p.is_active).length} active</span>
               </div>
             </div>
           </div>
@@ -473,6 +520,15 @@ if __name__ == "__main__":
               </span>
             </div>
             <div className="flex items-center space-x-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleManualSave}
+                className="text-blue-600 hover:text-blue-700"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Save
+              </Button>
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -521,10 +577,12 @@ if __name__ == "__main__":
         <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
           {/* Participants Panel */}
           <div className="p-4 border-b border-gray-200">
-            <h3 className="text-sm font-medium text-gray-900 mb-3">Participants ({participants.length})</h3>
+            <h3 className="text-sm font-medium text-gray-900 mb-3">
+              Participants ({participants.filter(p => p.is_active).length})
+            </h3>
             <div className="space-y-2">
-              {participants.map((participant) => {
-                const isOwner = participant.user_id === currentSession.owner_id
+              {participants.filter(p => p.is_active).map((participant) => {
+                const isOwner = participant.user_id === currentSession.created_by
                 const displayName = participant.user_profiles?.display_name || 
                                   participant.user_profiles?.email?.split('@')[0] || 
                                   'Anonymous User'

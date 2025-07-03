@@ -213,6 +213,22 @@ app.listen(port, () => {
         throw new Error('Failed to create session in database')
       }
 
+      // Automatically add the creator as a participant
+      const { error: participantError } = await supabase
+        .from('session_participants')
+        .insert({
+          session_id: createdSession.id,
+          user_id: user.id,
+          role: 'owner',
+          joined_at: new Date().toISOString(),
+          is_active: true
+        })
+
+      if (participantError) {
+        console.error('Error adding creator as participant:', participantError)
+        // Don't throw error here as session is already created
+      }
+
       // Save initial code snapshot with template starter code
       if (template?.starter) {
         const supabase = serviceProvider.getSupabaseClient()

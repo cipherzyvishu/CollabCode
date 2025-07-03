@@ -94,18 +94,14 @@ export class ServiceProvider {
   // Session management helpers
   async createQuickSession(userId: string, language: string = 'javascript'): Promise<Database['public']['Tables']['sessions']['Row'] | null> {
     const sessionData = {
-      name: `Quick Session ${new Date().toLocaleDateString()}`,
+      title: `Quick Session ${new Date().toLocaleDateString()}`,
       description: 'Quick collaborative coding session',
       language,
-      owner_id: userId,
-      code: this.generateSessionCode(),
-      settings: {
-        theme: 'vs-dark',
-        fontSize: 14,
-        autoSave: true,
-        allowGuests: true
-      },
-      status: 'active' as const
+      created_by: userId,
+      session_code: this.generateSessionCode(),
+      is_active: true,
+      is_public: true,
+      template_type: language
     }
 
     return await this.sessionService.createSession(sessionData)

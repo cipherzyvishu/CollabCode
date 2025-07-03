@@ -176,18 +176,27 @@ export function setupSocketHandlers(io: IOType) {
     // Handle leaving session for Monaco Editor
     socket.on('leave-session', (sessionId: string) => {
       try {
+        // Check if user is actually in the session before logging/processing
+        const participants = sessionManager.getSessionParticipants(sessionId)
+        const isInSession = participants.some(p => p.socketId === socket.id)
+        
+        if (!isInSession) {
+          // User is not in session, no need to process
+          return
+        }
+        
         logger.info(`User ${socket.id} leaving session ${sessionId} (Monaco)`)
         
         // Remove from session manager
         sessionManager.removeUserFromSession(sessionId, socket.id)
         
         // Get remaining participants
-        const participants = sessionManager.getSessionParticipants(sessionId)
+        const remainingParticipants = sessionManager.getSessionParticipants(sessionId)
         
         // Notify other participants
         socket.to(sessionId).emit('user-left', {
           userId: socket.id,
-          participantCount: participants.length
+          participantCount: remainingParticipants.length
         })
         
         socket.leave(sessionId)

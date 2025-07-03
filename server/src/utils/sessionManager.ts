@@ -46,14 +46,34 @@ export class SessionManager {
   }
 
   // Remove user from a session
-  removeUserFromSession(sessionId: string, userId: string): void {
+  removeUserFromSession(sessionId: string, userIdentifier: string): void {
     const session = this.sessions.get(sessionId)
     
-    if (session) {
-      session.users.delete(userId)
+    if (!session) {
+      return // Session doesn't exist
+    }
+
+    // Check if userIdentifier is a userId or socketId
+    let userToRemove: string | null = null
+    
+    // First try to find by userId
+    if (session.users.has(userIdentifier)) {
+      userToRemove = userIdentifier
+    } else {
+      // Try to find by socketId
+      for (const [userId, user] of session.users.entries()) {
+        if (user.socketId === userIdentifier) {
+          userToRemove = userId
+          break
+        }
+      }
+    }
+    
+    if (userToRemove) {
+      session.users.delete(userToRemove)
       session.lastActivity = new Date()
       
-      logger.info(`User ${userId} removed from session ${sessionId}. Remaining users: ${session.users.size}`)
+      logger.info(`User ${userToRemove} removed from session ${sessionId}. Remaining users: ${session.users.size}`)
       
       // If no users left, clean up the session after a delay
       if (session.users.size === 0) {

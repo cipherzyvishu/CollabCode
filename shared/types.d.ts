@@ -22,7 +22,12 @@ export interface SessionParticipant {
 export interface CodeSnapshot {
     id: string;
     session_id: string;
+    version_number: number;
     code: string;
+    language: string;
+    saved_by: string;
+    is_auto_save: boolean;
+    change_summary?: string;
     saved_at: string;
 }
 export interface ServerToClientEvents {

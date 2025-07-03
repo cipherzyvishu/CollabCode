@@ -60,7 +60,7 @@ export const useSessionStore = create<SessionState>()(
               .select(`
                 *,
                 user_profiles (
-                  id,
+                  user_id,
                   display_name,
                   avatar_url
                 )
@@ -71,7 +71,11 @@ export const useSessionStore = create<SessionState>()(
           const session = sessionResponse.data
           const participants = participantsResponse.data || []
           
+          console.log('[sessionStore] Fetched session data:', session);
+          console.log('[sessionStore] Fetched participants data:', participants);
+
           if (!session) {
+            console.error('[sessionStore] Session not found in Supabase response.');
             set({ error: 'Session not found', isLoading: false })
             return
           }
@@ -79,8 +83,11 @@ export const useSessionStore = create<SessionState>()(
           set({
             currentSession: session as any,
             participants: participants as any,
-            isLoading: false
+            isLoading: false,
+            error: null, // Explicitly clear previous errors
           })
+
+          console.log('[sessionStore] Session state updated. isLoading: false');
 
           // Load initial code snapshots
           get().loadCodeSnapshots(5)
@@ -142,9 +149,18 @@ export const useSessionStore = create<SessionState>()(
 
       saveCodeSnapshot: async (code: string, userId: string) => {
         const { currentSession } = get()
-        if (!currentSession) return
+        if (!currentSession) {
+          console.error('No current session for code snapshot')
+          return
+        }
 
         try {
+          console.log('SessionStore: Attempting to save code snapshot', {
+            sessionId: currentSession.id,
+            codeLength: code.length,
+            userId
+          })
+          
           const snapshot = await serviceProvider.sessionService.saveCodeSnapshot(
             currentSession.id,
             code,
@@ -152,12 +168,15 @@ export const useSessionStore = create<SessionState>()(
           )
           
           if (snapshot) {
+            console.log('SessionStore: Code snapshot saved successfully', snapshot)
             set(state => ({
               codeSnapshots: [snapshot, ...state.codeSnapshots].slice(0, 10) // Keep latest 10
             }))
+          } else {
+            console.error('SessionStore: Failed to save code snapshot - no data returned')
           }
         } catch (error) {
-          console.error('Failed to save code snapshot:', error)
+          console.error('SessionStore: Error saving code snapshot:', error)
         }
       },
 

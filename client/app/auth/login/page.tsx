@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useSupabase } from '../../providers'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -40,7 +40,18 @@ export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false)
   
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = useSupabase()
+  
+  // Get redirect URL from query params
+  const redirectTo = searchParams.get('redirectTo') || '/dashboard'
+  // Check if this is a session join request
+  const isJoiningSession = searchParams.get('joinSession') === 'true'
+  console.log('🔄 Login page loaded with redirectTo:', redirectTo, 'isJoiningSession:', isJoiningSession)
+
+  useEffect(() => {
+    console.log('🔐 Login page - redirect URL:', redirectTo)
+  }, [redirectTo])
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,11 +65,17 @@ export default function LoginPage() {
           return
         }
         
+        // Create a callback URL that includes the session join flag if needed
+        const callbackParams = new URLSearchParams({ next: redirectTo });
+        if (isJoiningSession) {
+          callbackParams.set('joinSession', 'true');
+        }
+        
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/dashboard`
+            emailRedirectTo: `${window.location.origin}/auth/callback?${callbackParams.toString()}`
           }
         })
         
@@ -74,7 +91,8 @@ export default function LoginPage() {
         
         if (error) throw error
         
-        router.push('/dashboard')
+        console.log('✅ Sign in successful, redirecting to:', redirectTo)
+        router.push(redirectTo)
       }
     } catch (error: any) {
       setError(error.message)
@@ -88,10 +106,16 @@ export default function LoginPage() {
     setError('')
     
     try {
+      // Create a callback URL that includes the session join flag if needed
+      const callbackParams = new URLSearchParams({ next: redirectTo });
+      if (isJoiningSession) {
+        callbackParams.set('joinSession', 'true');
+      }
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`
+          redirectTo: `${window.location.origin}/auth/callback?${callbackParams.toString()}`
         }
       })
       
@@ -107,10 +131,16 @@ export default function LoginPage() {
     setError('')
     
     try {
+      // Create a callback URL that includes the session join flag if needed
+      const callbackParams = new URLSearchParams({ next: redirectTo });
+      if (isJoiningSession) {
+        callbackParams.set('joinSession', 'true');
+      }
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`
+          redirectTo: `${window.location.origin}/auth/callback?${callbackParams.toString()}`
         }
       })
       

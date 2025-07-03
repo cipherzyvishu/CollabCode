@@ -3,6 +3,7 @@ import { createServer } from 'http'
 import dotenv from 'dotenv'
 import logger from './utils/logger'
 import { setupSocketHandlers } from './events/socketHandlers'
+import { YjsWebSocketServer } from './utils/yjsServer'
 import { ClientToServerEvents, ServerToClientEvents } from '@/shared/types'
 
 // Load environment variables
@@ -28,6 +29,9 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 // Set up Socket.IO event handlers
 setupSocketHandlers(io)
 
+// Initialize Y.js WebSocket server
+const yjsServer = new YjsWebSocketServer(httpServer, '/collaboration')
+
 // Global error handling
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught Exception:', error)
@@ -42,6 +46,7 @@ process.on('unhandledRejection', (reason, promise) => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully')
+  yjsServer.close()
   httpServer.close(() => {
     logger.info('Server closed')
     process.exit(0)
@@ -50,6 +55,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully')
+  yjsServer.close()
   httpServer.close(() => {
     logger.info('Server closed')
     process.exit(0)
@@ -57,8 +63,9 @@ process.on('SIGINT', () => {
 })
 
 // Start server
-httpServer.listen(PORT, 'localhost', () => {
+httpServer.listen(Number(PORT), 'localhost', () => {
   logger.info(`🚀 CollabCode Socket.IO Server running on localhost:${PORT}`)
+  logger.info(`🔗 Y.js WebSocket Server available at ws://localhost:${PORT}`)
   logger.info(`📡 Accepting connections from: ${ALLOWED_ORIGINS.join(', ')}`)
 })
 

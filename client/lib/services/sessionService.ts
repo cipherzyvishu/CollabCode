@@ -66,14 +66,7 @@ export class SessionService {
           .single(),
         this.supabase
           .from('session_participants')
-          .select(`
-            *,
-            user_profiles (
-              id,
-              display_name,
-              avatar_url
-            )
-          `)
+          .select('*,user_profiles!inner(user_id,display_name,avatar_url)')
           .eq('session_id', sessionId)
       ])
 
@@ -135,7 +128,7 @@ export class SessionService {
       const { data, error } = await this.supabase
         .from('sessions')
         .select('*')
-        .or(`owner_id.eq.${userId},id.in.(${await this.getUserParticipatedSessionIds(userId)})`)
+        .or(`created_by.eq.${userId},id.in.(${await this.getUserParticipatedSessionIds(userId)})`)
         .order('created_at', { ascending: false })
 
       if (error) {
@@ -160,7 +153,7 @@ export class SessionService {
   }
 
   // Session Participants operations
-  async joinSession(sessionId: string, userId: string, role: 'viewer' | 'editor' = 'editor'): Promise<SessionParticipant | null> {
+  async joinSession(sessionId: string, userId: string, role: 'owner' | 'moderator' | 'participant' = 'participant'): Promise<SessionParticipant | null> {
     try {
       const participantData: SessionParticipantInsert = {
         session_id: sessionId,
@@ -211,7 +204,7 @@ export class SessionService {
     }
   }
 
-  async updateParticipantRole(sessionId: string, userId: string, role: 'viewer' | 'editor'): Promise<boolean> {
+  async updateParticipantRole(sessionId: string, userId: string, role: 'owner' | 'moderator' | 'participant'): Promise<boolean> {
     try {
       const { error } = await this.supabase
         .from('session_participants')
@@ -234,28 +227,49 @@ export class SessionService {
   // Code Snapshots operations
   async saveCodeSnapshot(sessionId: string, code: string, userId: string, version?: number): Promise<CodeSnapshot | null> {
     try {
-      const snapshotData: CodeSnapshotInsert = {
-        session_id: sessionId,
-        code_content: code,
-        created_by: userId,
-        version: version || await this.getNextVersion(sessionId),
-        created_at: new Date().toISOString()
+      console.log('SessionService: saveCodeSnapshot called', {
+        sessionId,
+        codeLength: code.length,
+        userId,
+        version
+      })
+
+      // Get the session to get the language
+      const session = await this.getSession(sessionId)
+      if (!session) {
+        console.error('SessionService: Session not found for code snapshot')
+        return null
       }
+
+      console.log('SessionService: Session found', { language: session.language })
+
+      const snapshotData = {
+        session_id: sessionId,
+        code: code, // Correct column name
+        language: session.language,
+        saved_by: userId, // Correct column name
+        version_number: 1, // Start with version 1 for now
+        is_auto_save: true,
+        saved_at: new Date().toISOString() // Correct column name
+      }
+
+      console.log('SessionService: Inserting snapshot data', snapshotData)
 
       const { data, error } = await this.supabase
         .from('code_snapshots')
-        .insert(snapshotData)
+        .insert(snapshotData as any) // Type assertion to bypass TypeScript type mismatch
         .select()
         .single()
 
       if (error) {
-        console.error('Error saving code snapshot:', error)
+        console.error('SessionService: Database error saving code snapshot:', error)
         return null
       }
 
+      console.log('SessionService: Code snapshot saved successfully:', data)
       return data
     } catch (error) {
-      console.error('Failed to save code snapshot:', error)
+      console.error('SessionService: Exception in saveCodeSnapshot:', error)
       return null
     }
   }
@@ -287,7 +301,7 @@ export class SessionService {
         .from('code_snapshots')
         .select('*')
         .eq('session_id', sessionId)
-        .order('version', { ascending: false })
+        .order('saved_at', { ascending: false }) // Use saved_at instead of created_at
         .limit(1)
         .single()
 
@@ -360,14 +374,13 @@ export class SessionService {
       }
 
       const sessionData: SessionInsert = {
-        name: sessionName,
+        title: sessionName,
         description: template.description,
         language: template.language,
-        owner_id: userId,
-        code: this.generateSessionCode(),
-        settings: template.default_settings || {},
-        template_id: templateId,
-        status: 'active'
+        created_by: userId,
+        session_code: this.generateSessionCode(),
+        template_type: template.language || 'blank',
+        is_active: true
       }
 
       return await this.createSession(sessionData)

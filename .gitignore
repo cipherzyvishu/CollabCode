@@ -44,6 +44,8 @@ coverage/
 # Temporary files
 .tmp/
 temp/
+debug_render_loop.js
+**/test-*.js
 
 # Package manager
 package-lock.json

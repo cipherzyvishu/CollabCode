@@ -40,7 +40,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     if (supabase) {
       initialize()
     }
-  }, [supabase, initialize])
+  }, [supabase]) // Removed 'initialize' from dependencies to prevent infinite loop
 
   // Socket.IO connection effect
   useEffect(() => {
