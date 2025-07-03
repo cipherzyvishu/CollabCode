@@ -5,9 +5,9 @@
   "main": "dist/src/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "npm run clean && tsc",
+    "build": "mkdir -p dist && tsc",
     "start": "node dist/src/index.js",
-    "clean": "rimraf dist",
+    "clean": "rimraf dist || true",
     "type-check": "tsc --noEmit"
   },
   "engines": {
@@ -18,6 +18,7 @@
     "@y/websocket-server": "^0.1.1",
     "dotenv": "^16.4.0",
     "isolated-vm": "^5.0.4",
+    "rimraf": "^6.0.0",
     "socket.io": "^4.8.0",
     "uuid": "^10.0.0",
     "winston": "^3.11.0",
@@ -29,7 +30,6 @@
     "@types/node": "^22.0.0",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.5.0",
-    "rimraf": "^6.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.6.0"
   },

@@ -135,6 +135,13 @@ If you encounter an error like "Error reading client/lib/database.types.ts: stre
 2. The fix is documented in the UTF8_ENCODING_FIX.md file
 3. If you encounter similar issues with other files, you may need to recreate them with proper UTF-8 encoding
 
+### rimraf Not Found Error
+If you encounter an error with "rimraf: not found":
+1. We've moved rimraf from devDependencies to dependencies
+2. We've simplified the build process in railway.toml to use npx tsc directly
+3. We've updated the scripts to handle cases where rimraf isn't available
+4. These changes should resolve build errors related to missing dependencies
+
 ## 🔄 Next Steps
 
 After successful deployment:

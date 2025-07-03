@@ -14,7 +14,7 @@ RUN npm install --omit=dev
 COPY . .
 
 # Build the TypeScript code
-RUN npm run build
+RUN mkdir -p dist && npm run build
 
 # Expose port (Railway will override this)
 EXPOSE 8000
