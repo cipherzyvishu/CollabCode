@@ -2,7 +2,7 @@
   "framework": "nextjs",
   "functions": {
     "app/api/**/*.ts": {
-      "runtime": "@vercel/node"
+      "runtime": "@vercel/node@3.0.0"
     }
   },
   "headers": [
