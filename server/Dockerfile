@@ -7,14 +7,17 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install --omit=dev
+# Install dependencies (including dev dependencies for build)
+RUN npm install
 
 # Copy source code
 COPY . .
 
 # Build the TypeScript code
-RUN mkdir -p dist && npm run build
+RUN npm run build
+
+# Remove dev dependencies after build
+RUN npm prune --production
 
 # Expose port (Railway will override this)
 EXPOSE 8000
