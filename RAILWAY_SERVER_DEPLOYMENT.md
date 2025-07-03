@@ -142,6 +142,26 @@ If you encounter an error with "rimraf: not found":
 3. We've updated the scripts to handle cases where rimraf isn't available
 4. These changes should resolve build errors related to missing dependencies
 
+### TypeScript Not Found Error
+If you encounter an error like "sh: tsc: not found" or "tsc: command not found" in your build logs:
+
+1. **Root Cause**: This happens because TypeScript is installed as a dev dependency but Railway may not install dev dependencies in production build environments by default.
+
+2. **Solutions Implemented**:
+   - We've moved `typescript` from devDependencies to dependencies in package.json
+   - We've updated all build scripts to use `npx tsc` instead of directly calling `tsc`
+   - We've ensured the build command in railway.toml explicitly uses `npx tsc`
+
+3. **Verifying the Fix**:
+   - Check Railway build logs to confirm that TypeScript is being installed
+   - Verify that the build command is using `npx tsc` to compile TypeScript files
+   - Make sure the dist folder is being created successfully
+
+4. **If Issues Persist**:
+   - Try manually triggering a new deployment after clearing the cache
+   - Check if there are any version conflicts between TypeScript and other dependencies
+   - Consider adding `@types/node` to regular dependencies as well if type errors occur
+
 ## 🔄 Next Steps
 
 After successful deployment:
