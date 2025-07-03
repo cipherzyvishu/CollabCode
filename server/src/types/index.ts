@@ -1,4 +1,4 @@
-// Shared TypeScript types and interfaces for CollabCode
+// Local types for the server (copied from shared/types.ts)
 
 export interface User {
   id: string;
@@ -122,26 +122,4 @@ export interface VoiceUser {
   userId: string;
   isConnected: boolean;
   isMuted: boolean;
-}
-
-// Zustand store types
-export interface EditorState {
-  code: string;
-  language: ProgrammingLanguage;
-  setCode: (code: string) => void;
-  setLanguage: (language: ProgrammingLanguage) => void;
-}
-
-export interface SessionState {
-  currentSession: Session | null;
-  participants: SessionParticipant[];
-  isConnected: boolean;
-  setCurrentSession: (session: Session | null) => void;
-  setParticipants: (participants: SessionParticipant[]) => void;
-  setIsConnected: (connected: boolean) => void;
-}
-
-export interface UserState {
-  user: User | null;
-  setUser: (user: User | null) => void;
 }

@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { useSessionStore, useUserStore } from '@/lib/stores'
 import { serviceProvider } from '@/lib/services'
+import { socketManager } from '@/sockets'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import { 
@@ -45,6 +46,13 @@ interface SessionState {
   videoEnabled: boolean
   editorTheme: 'vs-dark' | 'light'
   isRunning: boolean
+}
+
+interface ExecutionResult {
+  output: string | null
+  error: string | null
+  executionTime: number
+  timestamp: string
 }
 
 export default function SessionPage() {
@@ -93,6 +101,7 @@ export default function SessionPage() {
   
   const [currentCode, setCurrentCode] = useState('')
   const [hasJoined, setHasJoined] = useState(false)
+  const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null)
   const joinedRef = useRef(false) // Track if user has already joined
   const initializationRef = useRef(false) // Track if session has been initialized
 
@@ -211,6 +220,43 @@ export default function SessionPage() {
       }
     }
   }, [currentSession, user, sessionLoading, participants, sessionId, forceJoin])
+
+  // Socket connection and event listeners
+  useEffect(() => {
+    if (user && currentSession && hasJoined) {
+      const socket = socketManager.connect(user.id)
+      
+      // Listen for code execution results
+      socket.on('code_execution_result', (data) => {
+        if (data.userId === user.id) {
+          setExecutionResult({
+            output: data.output,
+            error: data.error,
+            executionTime: data.executionTime,
+            timestamp: new Date().toISOString()
+          })
+          setSessionState(prev => ({ ...prev, isRunning: false }))
+        }
+      })
+
+      // Listen for code execution broadcasts from other users
+      socket.on('code_execution_broadcast', (data) => {
+        if (data.userId !== user.id) {
+          console.log(`User ${data.userId} executed code:`, data)
+          // You could show a notification here about other users' code execution
+        }
+      })
+
+      // Join the session
+      socketManager.joinSession(currentSession.id, user.id)
+
+      return () => {
+        socket.off('code_execution_result')
+        socket.off('code_execution_broadcast')
+        socketManager.leaveSession(currentSession.id, user.id)
+      }
+    }
+  }, [user, currentSession, hasJoined])
 
   // Load initial code from latest snapshot
   useEffect(() => {
@@ -359,15 +405,18 @@ print(greeting("Collaborator"))
   }, [])
 
   const handleRunCode = () => {
+    if (!user || !currentSession || !currentCode.trim()) {
+      console.log('Cannot run code: missing user, session, or code')
+      return
+    }
+
     setSessionState(prev => ({ ...prev, isRunning: true }))
-    // TODO: Implement code execution
+    setExecutionResult(null) // Clear previous results
+    
     console.log('Running code:', currentCode)
     
-    // Simulate code execution
-    setTimeout(() => {
-      setSessionState(prev => ({ ...prev, isRunning: false }))
-      // TODO: Show execution results
-    }, 2000)
+    // Send code execution request via socket
+    socketManager.runCode(currentSession.id, currentCode, user.id, currentSession.language)
   }
 
   const handleDownloadCode = () => {
@@ -620,6 +669,45 @@ print(greeting("Collaborator"))
                 <li>Refactoring help</li>
               </ul>
             </div>
+          </div>
+
+          {/* Code Execution Results */}
+          <div className="p-4 border-b border-gray-200">
+            <h3 className="text-sm font-medium text-gray-900 mb-3">Execution Results</h3>
+            {executionResult ? (
+              <div className="space-y-3">
+                {executionResult.output && (
+                  <div>
+                    <h4 className="text-xs font-medium text-green-700 mb-1">Output:</h4>
+                    <pre className="text-xs bg-green-50 border border-green-200 rounded p-2 whitespace-pre-wrap font-mono text-green-800">
+                      {executionResult.output}
+                    </pre>
+                  </div>
+                )}
+                {executionResult.error && (
+                  <div>
+                    <h4 className="text-xs font-medium text-red-700 mb-1">Error:</h4>
+                    <pre className="text-xs bg-red-50 border border-red-200 rounded p-2 whitespace-pre-wrap font-mono text-red-800">
+                      {executionResult.error}
+                    </pre>
+                  </div>
+                )}
+                <div className="text-xs text-gray-500">
+                  Executed in {executionResult.executionTime}ms
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded">
+                <p>Click "Run" to execute your code and see results here.</p>
+                <p className="mt-2">Currently supports JavaScript execution with:</p>
+                <ul className="mt-1 list-disc list-inside space-y-1">
+                  <li>console.log() output</li>
+                  <li>Error handling</li>
+                  <li>Execution time tracking</li>
+                  <li>Memory-safe execution</li>
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Chat Panel Placeholder */}

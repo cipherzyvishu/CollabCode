@@ -1,8 +1,9 @@
 import { Server, Socket } from 'socket.io'
 import { v4 as uuidv4 } from 'uuid'
 import logger from '../utils/logger'
-import { ClientToServerEvents, ServerToClientEvents } from '@/shared/types'
+import { ClientToServerEvents, ServerToClientEvents } from '../types'
 import { SessionManager } from '../utils/sessionManager'
+import { codeExecutionService } from '../services/codeExecutionService'
 
 type SocketType = Socket<ClientToServerEvents, ServerToClientEvents>
 type IOType = Server<ClientToServerEvents, ServerToClientEvents>
@@ -233,6 +234,59 @@ export function setupSocketHandlers(io: IOType) {
         logger.info(`AI response sent for session ${sessionId}`)
       } catch (error) {
         logger.error('Error handling AI request:', error)
+      }
+    })
+
+    // Handle code execution
+    socket.on('run_code', async ({ sessionId, code, userId, language }) => {
+      try {
+        logger.info(`Code execution request in session ${sessionId} by user ${userId}`)
+        
+        // Currently only JavaScript is supported
+        if (language !== 'javascript') {
+          socket.emit('code_execution_result', {
+            sessionId,
+            userId,
+            output: null,
+            error: `Language '${language}' is not supported yet. Currently only JavaScript is supported.`,
+            executionTime: 0
+          })
+          return
+        }
+
+        // Execute the code using the code execution service
+        const result = await codeExecutionService.executeJavaScript(code)
+        
+        // Send result back to the requesting user
+        socket.emit('code_execution_result', {
+          sessionId,
+          userId,
+          output: result.output,
+          error: result.error,
+          executionTime: result.executionTime
+        })
+        
+        // Also broadcast to other users in the session (optional)
+        socket.to(sessionId).emit('code_execution_broadcast', {
+          userId,
+          output: result.output,
+          error: result.error,
+          executionTime: result.executionTime,
+          timestamp: new Date().toISOString()
+        })
+        
+        logger.info(`Code execution completed for session ${sessionId}, execution time: ${result.executionTime}ms`)
+      } catch (error) {
+        logger.error('Error handling code execution:', error)
+        
+        // Send error response
+        socket.emit('code_execution_result', {
+          sessionId,
+          userId,
+          output: null,
+          error: 'Internal server error during code execution',
+          executionTime: 0
+        })
       }
     })
 

@@ -1,0 +1,13 @@
+# Railway Deployment Configuration
+
+# Use Node.js 20
+[build]
+  command = "npm run build"
+  
+[deploy]
+  command = "npm start"
+
+# Health check endpoint
+[health]
+  path = "/"
+  interval = 30

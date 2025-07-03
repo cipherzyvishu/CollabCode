@@ -22,12 +22,7 @@ export interface SessionParticipant {
 export interface CodeSnapshot {
     id: string;
     session_id: string;
-    version_number: number;
     code: string;
-    language: string;
-    saved_by: string;
-    is_auto_save: boolean;
-    change_summary?: string;
     saved_at: string;
 }
 export interface ServerToClientEvents {
@@ -51,6 +46,20 @@ export interface ServerToClientEvents {
     aiResponse: (data: {
         explanation: string;
         userId: string;
+    }) => void;
+    code_execution_result: (data: {
+        sessionId: string;
+        userId: string;
+        output: string | null;
+        error: string | null;
+        executionTime: number;
+    }) => void;
+    code_execution_broadcast: (data: {
+        userId: string;
+        output: string | null;
+        error: string | null;
+        executionTime: number;
+        timestamp: string;
     }) => void;
     'code-change': (data: {
         code: string;
@@ -113,6 +122,12 @@ export interface ClientToServerEvents {
         sessionId: string;
         code: string;
         userId: string;
+    }) => void;
+    run_code: (data: {
+        sessionId: string;
+        code: string;
+        userId: string;
+        language: string;
     }) => void;
     'code-change': (data: {
         sessionId: string;

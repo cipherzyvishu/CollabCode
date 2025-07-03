@@ -103,6 +103,10 @@ class SocketManager {
   requestAI(sessionId: string, code: string, userId: string) {
     this.socket?.emit('requestAI', { sessionId, code, userId })
   }
+
+  runCode(sessionId: string, code: string, userId: string, language: string) {
+    this.socket?.emit('run_code', { sessionId, code, userId, language })
+  }
 }
 
 // Export singleton instance

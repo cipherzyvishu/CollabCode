@@ -39,6 +39,22 @@ export interface ServerToClientEvents {
   cursorMove: (data: { userId: string; position: { line: number; column: number } }) => void;
   aiResponse: (data: { explanation: string; userId: string }) => void;
   
+  // Code execution events
+  code_execution_result: (data: { 
+    sessionId: string; 
+    userId: string; 
+    output: string | null; 
+    error: string | null; 
+    executionTime: number 
+  }) => void;
+  code_execution_broadcast: (data: { 
+    userId: string; 
+    output: string | null; 
+    error: string | null; 
+    executionTime: number;
+    timestamp: string;
+  }) => void;
+  
   // Monaco Editor specific events
   'code-change': (data: { code: string; userId: string; timestamp?: string }) => void;
   'cursor-change': (data: { 
@@ -61,6 +77,9 @@ export interface ClientToServerEvents {
   codeChange: (data: { sessionId: string; code: string; userId: string }) => void;
   cursorMove: (data: { sessionId: string; position: { line: number; column: number }; userId: string }) => void;
   requestAI: (data: { sessionId: string; code: string; userId: string }) => void;
+  
+  // Code execution events
+  run_code: (data: { sessionId: string; code: string; userId: string; language: string }) => void;
   
   // Monaco Editor specific events
   'code-change': (data: { sessionId: string; code: string; userId: string }) => void;
