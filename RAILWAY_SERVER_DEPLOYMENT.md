@@ -129,6 +129,12 @@ If you encounter an error about `npm ci` failing:
 3. A package-lock.json file has been generated
 4. These changes should resolve npm installation issues
 
+### UTF-8 Encoding Issues
+If you encounter an error like "Error reading client/lib/database.types.ts: stream did not contain valid UTF-8":
+1. We've fixed this issue by creating a clean version of the file with proper UTF-8 encoding
+2. The fix is documented in the UTF8_ENCODING_FIX.md file
+3. If you encounter similar issues with other files, you may need to recreate them with proper UTF-8 encoding
+
 ## 🔄 Next Steps
 
 After successful deployment:
