@@ -5,10 +5,10 @@
   "main": "dist/src/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "mkdir -p dist && npx tsc",
+    "build": "rimraf dist && tsc",
     "start": "node dist/src/index.js",
     "clean": "rimraf dist || true",
-    "type-check": "npx tsc --noEmit"
+    "type-check": "tsc --noEmit"
   },
   "engines": {
     "node": ">=20.0.0"

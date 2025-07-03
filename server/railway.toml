@@ -3,7 +3,7 @@
 # Use Node.js 20
 [build]
   builder = "nixpacks"
-  buildCommand = "npm install && mkdir -p dist && npx tsc"
+  buildCommand = "npm install && npm run build"
   
 [deploy]
   command = "npm start"
