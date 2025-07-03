@@ -55,8 +55,8 @@ Go to your Railway project dashboard and add these variables:
 ```env
 NODE_ENV=production
 PORT=8000
-SUPABASE_URL=https://xygdsizwhthynrswjlqb.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh5Z2RzaXp3aHRoeW5yc3dqbHFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MTE5NjQzMSwiZXhwIjoyMDY2NzcyNDMxfQ.5-KrVl1sdxQgQsf0JDcQ7GRh6N-4TdHEtpM5mu0hwpk
+SUPABASE_URL=[your-supabase-url]
+SUPABASE_SERVICE_ROLE_KEY=[your-supabase-service-role-key]
 ALLOWED_ORIGINS=https://your-vercel-app.vercel.app,https://collabcode.vercel.app
 ```
 
